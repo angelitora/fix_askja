@@ -23,7 +23,7 @@ import drifter_tools as dt
 # Config
 # ---------------------------------------------------------------
 PLATFORM_ID = "300534068744010"
-DAYS_AGO = 9
+DAYS_AGO = 33
 API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 
 # Credentials: prefer environment variables (set as GitHub Actions
@@ -36,7 +36,7 @@ AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
 AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
 SMOOTH_WINDOW = 3
-SST_VMIN, SST_VMAX = 4.5, 6.0
+SST_VMIN, SST_VMAX = 4.5, 6.5
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
 OUT_DIR = "docs"
@@ -70,7 +70,7 @@ def main():
 
     domain = dt.Domain.from_points(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.02,
+        buffer_deg=0.03,
     )
     # The earlier "everything combined breaks" bug was specifically the
     # manually-positioned colorbar (fig.canvas.draw() + get_position()) —
@@ -92,7 +92,7 @@ def main():
         color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
         show_colorbar=True, contours=contours,
         show_extreme=True, smooth_window=SMOOTH_WINDOW,
-        extreme_threshold_std=1.0,
+        extreme_threshold_std=3.0,
         extreme_marker="o", extreme_color="black", extreme_alpha=0.9,
         basemap="imo",
         save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
@@ -108,8 +108,8 @@ def main():
         color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
         show_colorbar=True, contours=contours,
         show_extreme=True, smooth_window=SMOOTH_WINDOW,
-        extreme_threshold_std=1.0,
-        extreme_marker="o", extreme_color="black", extreme_alpha=0.9,
+        extreme_threshold_std=3.0,
+        extreme_marker="o", extreme_color="black", extreme_alpha=0.7,
         basemap="imo",
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
