@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="1800">
+<title>ASKJA Drifter — Live Status</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px;
+          margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.6rem; }
+  .meta { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .summary { background: #f4f8fb; border-left: 4px solid #2b7de9; padding: 1rem 1.25rem;
+              border-radius: 4px; margin-bottom: 1.5rem; font-size: 1.05rem; }
+  .banner.warning { background: #fff3cd; border-left: 4px solid #e6a700; padding: 0.9rem 1.1rem;
+                      border-radius: 4px; margin-bottom: 1.5rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .grid figure { margin: 0; }
+  img { width: 100%; border-radius: 6px; border: 1px solid #ddd; }
+  figcaption { font-size: 0.85rem; color: #555; margin-top: 0.3rem; text-align: center; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>Askja lake surface drifter — Live Status</h1>
+  <div class="meta">Report generated 2026-09-10 12:38 UTC · refreshes automatically every 3 hours</div>
+  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div>
+  
+  <div class="summary">Average SST over the last 3h of reported data: 5.48°C (13 readings, ending 2026-09-10 12:00 UTC).</div>
+
+  <figure>
+    <img src="assets/timeseries.png" alt="SST time series">
+    <figcaption>Raw and smoothed sea surface temperature</figcaption>
+  </figure>
+
+  <div class="grid">
+    <figure>
+      <img src="assets/map_overview.png" alt="Overview map">
+      <figcaption>Overview</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/map_zoom.png" alt="Zoomed map">
+      <figcaption>Zoom</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/map_last_positions.png" alt="Last positions map">
+      <figcaption>Most recent positions</figcaption>
+    </figure>
+  </div>
+</body>
+</html>
