@@ -23,7 +23,7 @@ import drifter_tools as dt
 # Config
 # ---------------------------------------------------------------
 PLATFORM_ID = "300534068744010"
-DAYS_AGO = 30
+DAYS_AGO = 9
 API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 
 # Credentials: prefer environment variables (set as GitHub Actions
@@ -35,8 +35,8 @@ API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
 AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
-SMOOTH_WINDOW = 5
-SST_VMIN, SST_VMAX = 4.5, 6.5
+SMOOTH_WINDOW = 3
+SST_VMIN, SST_VMAX = 4.5, 6.0
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
 OUT_DIR = "docs"
@@ -70,37 +70,60 @@ def main():
 
     domain = dt.Domain.from_points(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.03,
+        buffer_deg=0.02,
     )
-    dt.plot_map(
-        df, domain, contours=contours,
-        title=f"Drifter {PLATFORM_ID} \u2014 overview",
-        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo",
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
+    # plot_map_simple, kept as SEPARATE single-feature calls rather than
+    # one map with everything combined. Each config below was confirmed
+    # working individually via step-by-step diagnostics; combining all of
+    # them into one map kept breaking even after fixing the colorbar
+    # specifically, so — for reliability — the site is built from these
+    # separate views instead of chasing that combination further.
+    dt.plot_map_simple(
+        df, domain,
+        title=f"Drifter {PLATFORM_ID} \u2014 overview (temperature)",
+        color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
+        show_colorbar=True, basemap="imo",
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview_temp.png"),
+    )
+    dt.plot_map_simple(
+        df, domain,
+        title=f"Drifter {PLATFORM_ID} \u2014 overview (bathymetry contours)",
+        contours=contours, basemap="imo",
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview_contours.png"),
+    )
+    dt.plot_map_simple(
+        df, domain,
+        title=f"Drifter {PLATFORM_ID} \u2014 overview (very high SST)",
+        show_extreme=True, smooth_window=SMOOTH_WINDOW,
+        extreme_marker="o", extreme_color="black", extreme_alpha=0.7,
+        basemap="imo",
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview_extreme.png"),
     )
 
     zoom_domain = dt.Domain.from_points(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
         buffer_deg=0.005,
     )
-    dt.plot_map(
-        df, zoom_domain, contours=contours,
-        title=f"Drifter {PLATFORM_ID} \u2014 zoom",
-        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(8, 6),
+    dt.plot_map_simple(
+        df, zoom_domain,
+        title=f"Drifter {PLATFORM_ID} \u2014 zoom", figsize=(8, 6),
+        color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
+        show_colorbar=True, basemap="imo",
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
 
-    n_last = 15
+    n_last = 5
     last_df = df.iloc[-n_last:]
     last_domain = dt.Domain.from_points(
         last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
         buffer_deg=0.003,
     )
-    dt.plot_map(
-        df, last_domain, contours=contours,
+    dt.plot_map_simple(
+        df, last_domain,
         title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
-        n_last=n_last,
-        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(7, 6),
+        n_last=n_last, figsize=(7, 6),
+        color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
+        show_colorbar=True, basemap="imo",
         save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
     )
 
@@ -143,9 +166,8 @@ def write_html(summary):
 </style>
 </head>
 <body>
-  <h1>Askja lake surface drifter \u2014 Live Status</h1>
+  <h1>ASKJA Drifter \u2014 Live Status</h1>
   <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
-  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div>
   {stale_banner}
   <div class="summary">{summary['text']}</div>
 
@@ -156,8 +178,16 @@ def write_html(summary):
 
   <div class="grid">
     <figure>
-      <img src="assets/map_overview.png" alt="Overview map">
-      <figcaption>Overview</figcaption>
+      <img src="assets/map_overview_temp.png" alt="Overview map, temperature">
+      <figcaption>Overview \u2014 temperature</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/map_overview_extreme.png" alt="Overview map, very high SST locations">
+      <figcaption>Overview \u2014 very high SST locations</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/map_overview_contours.png" alt="Overview map, bathymetry contours">
+      <figcaption>Overview \u2014 bathymetry contours</figcaption>
     </figure>
     <figure>
       <img src="assets/map_zoom.png" alt="Zoomed map">

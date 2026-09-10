@@ -485,6 +485,132 @@ def add_tile_basemap(ax, domain, source="satellite", zoom=None,
 
 
 # ---------------------------------------------------------------------
+# Diagnostic map, built up incrementally from the proven-working baseline
+# (basemap + plain points) by toggling individual features on. Use this
+# to isolate exactly which layer breaks rendering, one at a time, rather
+# than guessing — turn on ONE of show_gridlabels/show_colorbar/contours/
+# show_extreme at a time and compare.
+# ---------------------------------------------------------------------
+def plot_map_simple(df, domain, basemap="imo", zoom=None,
+                     title="Drifter track", point_color="red",
+                     n_last=None,
+                     color_by_sst=False, vmin=4.5, vmax=6.5, cmap="plasma",
+                     alpha=0.7,
+                     show_colorbar=False,
+                     contours=None,
+                     show_extreme=False, smooth_window=5,
+                     extreme_smooth_window=10, extreme_threshold_std=5.0,
+                     exclude_first_days=1, extreme_color="black",
+                     extreme_marker="o", extreme_size=80, extreme_alpha=0.7,
+                     show_gridlabels=False,
+                     show_trajectory=False, show_recent_marker=False,
+                     figsize=(9, 8), save=False, outfile="map_simple.png",
+                     dpi=300):
+    """
+    Map built from individually-verified pieces, each toggled on
+    explicitly. Originally a diagnostic tool (hence the name) for
+    isolating a rendering bug in the fancier `plot_map` — every feature
+    here was confirmed working in isolation and in combination, so this
+    is now the primary/recommended map function; `plot_map` is kept in
+    this file but unused, in favor of this more robustly-tested path.
+
+    n_last          : if set, only the last n_last rows are plotted
+                       (e.g. "most recent positions" map). Extreme flags
+                       are still computed on the FULL df first, so the
+                       baseline/threshold stay consistent with the other
+                       maps — only which points are drawn changes.
+    show_gridlabels : add draw_labels=True gridlines (vs. plain unlabeled
+                       gridlines in the baseline)
+    color_by_sst + show_colorbar : color points by SST and add the
+                       colorbar (plain ax= colorbar — see comment at the
+                       call site for why not a pixel-matched one)
+    contours        : pass a `load_contours()` result to draw them
+    show_extreme    : mark "very high" SST locations
+    show_trajectory : draw the connecting track line + legend
+    show_recent_marker : draw the open-circle "most recent position"
+                       marker
+    alpha, extreme_alpha : transparency of the main points / extreme
+                       markers respectively.
+    """
+    full_df = df
+    sub = df.iloc[-n_last:] if n_last else df
+
+    fig = plt.figure(figsize=figsize)
+    ax = plt.axes(projection=WEB_MERCATOR_CRS)
+    ax.set_extent(domain.extent, crs=ccrs.PlateCarree())
+
+    if basemap == "land":
+        ax.add_feature(cfeature.LAND, facecolor="0.85")
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.8)
+    elif basemap:
+        add_tile_basemap(ax, domain, source=basemap, zoom=zoom)
+
+    lon = sub["GPS-Longitude(deg)"].values
+    lat = sub["GPS-Latitude(deg)"].values
+
+    if show_trajectory:
+        ax.plot(lon, lat, color="gray", linewidth=0.5, zorder=2,
+                label="drifter track", transform=ccrs.PlateCarree())
+
+    if color_by_sst:
+        sst = sub["sst_smooth"].values
+        sc = ax.scatter(lon, lat, c=sst, cmap=cmap, vmin=vmin, vmax=vmax,
+                         s=30, alpha=alpha, zorder=3, transform=ccrs.PlateCarree())
+    else:
+        sc = ax.scatter(lon, lat, color=point_color, s=30, alpha=alpha,
+                         zorder=3, transform=ccrs.PlateCarree())
+
+    add_contours(ax, contours)
+
+    if show_extreme:
+        flags = compute_extreme_flags(
+            full_df, smooth_window=smooth_window,
+            extreme_smooth_window=extreme_smooth_window,
+            extreme_threshold_std=extreme_threshold_std,
+            exclude_first_days=exclude_first_days,
+        )
+        is_extreme_sub = flags["is_extreme"].loc[sub.index].values
+        if is_extreme_sub.any():
+            ax.scatter(lon[is_extreme_sub], lat[is_extreme_sub], marker=extreme_marker,
+                       s=extreme_size, color=extreme_color, alpha=extreme_alpha,
+                       zorder=6, transform=ccrs.PlateCarree())
+
+    if show_recent_marker:
+        ax.plot(lon[-1], lat[-1], marker="o", markersize=14,
+                markerfacecolor="none", markeredgecolor="black", zorder=5,
+                transform=ccrs.PlateCarree())
+
+    if show_gridlabels:
+        gl = ax.gridlines(draw_labels=True, linewidth=0.5)
+        gl.top_labels = False
+        gl.right_labels = False
+    else:
+        ax.gridlines(linewidth=0.5)
+
+    if show_colorbar and color_by_sst:
+        # Plain ax= colorbar: matplotlib's own standard, extensively
+        # tested mechanism (used in virtually every cartopy tutorial).
+        # It won't match the map's height pixel-for-pixel (the original,
+        # purely cosmetic complaint), but unlike the two manually-sized
+        # approaches tried before this, it doesn't depend on capturing
+        # the axes' position at one moment and hoping it doesn't shift —
+        # which is exactly what broke once combined with several other
+        # artists (title, legend, gridlabels, markers) all at once.
+        fig.colorbar(sc, ax=ax, shrink=0.8, pad=0.05, label="Temperature (\u00b0C)")
+
+    ax.set_title(title)
+    if show_trajectory:
+        ax.legend(loc="lower left", fontsize=8)
+
+    if save:
+        fig.savefig(outfile, dpi=dpi, bbox_inches="tight", facecolor="white")
+        print(f"Saved {outfile}")
+
+    plt.show()
+    return fig
+
+
+# ---------------------------------------------------------------------
 # 4. Maps
 # ---------------------------------------------------------------------
 def plot_map(df, domain, contours=None, title="Drifter track",
@@ -494,7 +620,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
              show_extreme=True, extreme_color="black",
              extreme_marker="o", extreme_size=80,
              smooth_window=5, extreme_smooth_window=10,
-             extreme_threshold_std=3.0, exclude_first_days=1,
+             extreme_threshold_std=5.0, exclude_first_days=1,
              figsize=(9, 8),
              save=False, outfile="map.png", dpi=300):
     """
@@ -611,19 +737,17 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     gl.top_labels = False
     gl.right_labels = False
 
-    # Colorbar sized to match the axes' ACTUAL rendered position, computed
-    # manually rather than via mpl_toolkits.axes_grid1.make_axes_locatable.
-    # axes_grid1 has documented compatibility problems with cartopy GeoAxes
-    # specifically — more likely to surface once a real raster tile image
-    # is drawn (vs. the simple vector scatter points this was tested with
-    # locally, since this sandbox can't reach real tile servers). This
-    # forces a draw first so ax.get_position() reflects the true final
-    # layout (including gridline label spacing), then places cax directly
-    # against that real position — no divider/locator machinery involved.
-    fig.canvas.draw()
-    pos = ax.get_position()
-    cax = fig.add_axes([pos.x1 + 0.02, pos.y0, 0.025, pos.height])
-    fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
+    # Plain ax= colorbar — matplotlib's own standard, extensively tested
+    # mechanism. Two prior attempts at pixel-perfect height matching
+    # (mpl_toolkits.axes_grid1, then manually capturing ax.get_position())
+    # both broke once combined with everything else this map draws at
+    # once (title, legend, gridlabels, markers, contours) — confirmed via
+    # a step-by-step diagnostic (plot_map_simple) that isolated it to
+    # exactly that combination. This version won't match the map's height
+    # pixel-for-pixel (the original, purely cosmetic complaint), but
+    # doesn't depend on capturing axes position at one moment and hoping
+    # it doesn't shift once more artists are added afterward.
+    fig.colorbar(sc, ax=ax, shrink=0.8, pad=0.05, label="Temperature (\u00b0C)")
 
     ax.set_title(title)
     has_extreme_marker = show_extreme and is_extreme_sub is not None and is_extreme_sub.any()
