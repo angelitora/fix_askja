@@ -159,7 +159,7 @@ def write_html(summary):
     logo_bar = ""
     if logo_imgs:
         imgs_html = "\n    ".join(
-            f'<img src="logos/{f}" alt="logo">' for f in logo_imgs
+            f'<img src="assets/logos/{f}" alt="logo">' for f in logo_imgs
         )
         logo_bar = f'<div class="logos">\n    {imgs_html}\n  </div>'
 
@@ -174,6 +174,8 @@ def write_html(summary):
   body {{ font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px;
           margin: 2rem auto; padding: 0 1rem; color: #222; }}
   h1 {{ font-size: 1.6rem; }}
+  .logos {{ display: flex; flex-wrap: nowrap; align-items: center; gap: 1.5rem; margin-bottom: 1rem; }}
+  .logos img {{ max-height: 60px; width: auto; border: none; border-radius: 0; }}
   .meta {{ color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }}
   .summary {{ background: #f4f8fb; border-left: 4px solid #2b7de9; padding: 1rem 1.25rem;
               border-radius: 4px; margin-bottom: 1.5rem; font-size: 1.05rem; }}
@@ -190,7 +192,7 @@ def write_html(summary):
   {logo_bar}
   <h1>Askja Surface Drifter \u2014 Live Status</h1>
   <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
-  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div>
+  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar \u00derastarson</div>
   {stale_banner}
   <div class="summary">{summary['text']}</div>
 
