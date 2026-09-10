@@ -209,7 +209,7 @@ def summarize_latest_temperature(df, window_hours=3, expected_interval_hours=3,
 # markers, so both always agree on what counts as extreme.
 # ---------------------------------------------------------------------
 def compute_extreme_flags(df, smooth_window=3, extreme_smooth_window=5,
-                           extreme_threshold_std=1.0, exclude_first_days=1):
+                           extreme_threshold_std=3.0, exclude_first_days=1):
     """
     Identify which rows of `df` have "very high" SST.
 
@@ -252,8 +252,8 @@ def compute_extreme_flags(df, smooth_window=3, extreme_smooth_window=5,
 # ---------------------------------------------------------------------
 # 2. Time series plot: raw+smoothed SST, plus an anomaly panel
 # ---------------------------------------------------------------------
-def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
-                     extreme_threshold_std=1.0, exclude_first_days=1,
+def plot_timeseries(df, smooth_window=3, extreme_smooth_window=10,
+                     extreme_threshold_std=3.0, exclude_first_days=1,
                      title="Drifter surface temperature",
                      save=False, outfile="timeseries.png", dpi=300):
     """
@@ -499,7 +499,7 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                      show_colorbar=False,
                      contours=None,
                      show_extreme=False, smooth_window=5,
-                     extreme_smooth_window=10, extreme_threshold_std=5.0,
+                     extreme_smooth_window=10, extreme_threshold_std=3.0,
                      exclude_first_days=1, extreme_color="black",
                      extreme_marker="o", extreme_size=80, extreme_alpha=0.7,
                      show_gridlabels=False,
@@ -620,7 +620,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
              show_extreme=True, extreme_color="black",
              extreme_marker="o", extreme_size=80,
              smooth_window=5, extreme_smooth_window=10,
-             extreme_threshold_std=5.0, exclude_first_days=1,
+             extreme_threshold_std=3.0, exclude_first_days=1,
              figsize=(9, 8),
              save=False, outfile="map.png", dpi=300):
     """
