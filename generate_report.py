@@ -72,32 +72,30 @@ def main():
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
         buffer_deg=0.02,
     )
-    # plot_map_simple, kept as SEPARATE single-feature calls rather than
-    # one map with everything combined. Each config below was confirmed
-    # working individually via step-by-step diagnostics; combining all of
-    # them into one map kept breaking even after fixing the colorbar
-    # specifically, so — for reliability — the site is built from these
-    # separate views instead of chasing that combination further.
+    # The earlier "everything combined breaks" bug was specifically the
+    # manually-positioned colorbar (fig.canvas.draw() + get_position()) —
+    # that's gone now, replaced with a plain ax= colorbar. So combining
+    # temperature + contours + extreme markers into one map is safe again.
+    #
+    # extreme_threshold_std: was inherited at 5.0 (5 standard deviations)
+    # from an earlier customization — that's an extremely rare event
+    # statistically and was silently flagging zero points even on genuine
+    # warm spells. Lowered to 1.0 (matching plot_timeseries's own
+    # default) — note the baseline/std calculation includes the very
+    # event being tested (exclude_first_days only trims the record's
+    # start, not the middle), which dilutes a real signal's apparent
+    # significance, especially in a shorter record — so 1.0 tends to be
+    # needed in practice, not just statistically "notable" 2-3 sigma.
     dt.plot_map_simple(
         df, domain,
-        title=f"Drifter {PLATFORM_ID} \u2014 overview (temperature)",
+        title=f"Drifter {PLATFORM_ID} \u2014 overview",
         color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
-        show_colorbar=True, basemap="imo",
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview_temp.png"),
-    )
-    dt.plot_map_simple(
-        df, domain,
-        title=f"Drifter {PLATFORM_ID} \u2014 overview (bathymetry contours)",
-        contours=contours, basemap="imo",
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview_contours.png"),
-    )
-    dt.plot_map_simple(
-        df, domain,
-        title=f"Drifter {PLATFORM_ID} \u2014 overview (very high SST)",
+        show_colorbar=True, contours=contours,
         show_extreme=True, smooth_window=SMOOTH_WINDOW,
-        extreme_marker="o", extreme_color="black", extreme_alpha=0.7,
+        extreme_threshold_std=1.0,
+        extreme_marker="o", extreme_color="black", extreme_alpha=0.9,
         basemap="imo",
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview_extreme.png"),
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
     )
 
     zoom_domain = dt.Domain.from_points(
@@ -108,7 +106,11 @@ def main():
         df, zoom_domain,
         title=f"Drifter {PLATFORM_ID} \u2014 zoom", figsize=(8, 6),
         color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
-        show_colorbar=True, basemap="imo",
+        show_colorbar=True, contours=contours,
+        show_extreme=True, smooth_window=SMOOTH_WINDOW,
+        extreme_threshold_std=1.0,
+        extreme_marker="o", extreme_color="black", extreme_alpha=0.9,
+        basemap="imo",
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
 
@@ -178,16 +180,8 @@ def write_html(summary):
 
   <div class="grid">
     <figure>
-      <img src="assets/map_overview_temp.png" alt="Overview map, temperature">
-      <figcaption>Overview \u2014 temperature</figcaption>
-    </figure>
-    <figure>
-      <img src="assets/map_overview_extreme.png" alt="Overview map, very high SST locations">
-      <figcaption>Overview \u2014 very high SST locations</figcaption>
-    </figure>
-    <figure>
-      <img src="assets/map_overview_contours.png" alt="Overview map, bathymetry contours">
-      <figcaption>Overview \u2014 bathymetry contours</figcaption>
+      <img src="assets/map_overview.png" alt="Overview map">
+      <figcaption>Overview</figcaption>
     </figure>
     <figure>
       <img src="assets/map_zoom.png" alt="Zoomed map">
