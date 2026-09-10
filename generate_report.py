@@ -35,7 +35,7 @@ API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
 AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
-SMOOTH_WINDOW = 3
+SMOOTH_WINDOW = 5
 SST_VMIN, SST_VMAX = 4.5, 6.5
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
