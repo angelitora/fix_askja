@@ -1,0 +1,180 @@
+"""
+generate_report.py
+===================
+
+Builds a static HTML report (docs/index.html + docs/assets/*.png) with
+the latest ASKJA drifter temperature summary and plots. Meant to be run
+periodically (e.g. every 3 hours) by .github/workflows/update_report.yml,
+but works the same run locally:
+
+    python generate_report.py
+
+Uses drifter_tools.py for all the actual fetch/plot/summary logic —
+nothing here duplicates that; this file is just the "build one static
+page" orchestration.
+"""
+
+import os
+from datetime import datetime, timezone
+
+import drifter_tools as dt
+
+# ---------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------
+PLATFORM_ID = "300534068744010"
+DAYS_AGO = 30
+API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
+
+# Credentials: prefer environment variables (set as GitHub Actions
+# secrets — see .github/workflows/update_report.yml) so nothing
+# sensitive has to live in the committed script. `or` (not
+# os.environ.get(key, default)) so an empty-but-set env var still falls
+# back cleanly, which matters because GitHub sets referenced-but-unset
+# secrets to an empty string rather than omitting them.
+AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
+AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
+
+SMOOTH_WINDOW = 5
+SST_VMIN, SST_VMAX = 4.5, 6.5
+CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
+
+OUT_DIR = "docs"
+ASSETS_DIR = os.path.join(OUT_DIR, "assets")
+
+
+def main():
+    os.makedirs(ASSETS_DIR, exist_ok=True)
+
+    df = dt.fetch_drifter_data(
+        platform_id=PLATFORM_ID, days_ago=DAYS_AGO, api_url=API_URL,
+        auth_user=AUTH_USER, auth_pass=AUTH_PASS, smooth_window=SMOOTH_WINDOW,
+    )
+    print(f"Fetched {len(df)} row(s), {df.index.min()} to {df.index.max()}")
+
+    summary = dt.summarize_latest_temperature(
+        df, window_hours=3, expected_interval_hours=3,
+    )
+    print(summary["text"])
+
+    contours = None
+    if os.path.isfile(CONTOURS_CSV):
+        contours = dt.load_contours(CONTOURS_CSV)
+
+    # --- plots, saved straight into docs/assets ---
+    dt.plot_timeseries(
+        df, smooth_window=SMOOTH_WINDOW,
+        title=f"Drifter {PLATFORM_ID} \u2014 surface temperature",
+        save=True, outfile=os.path.join(ASSETS_DIR, "timeseries.png"),
+    )
+
+    domain = dt.Domain.from_points(
+        df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
+        buffer_deg=0.03,
+    )
+    dt.plot_map(
+        df, domain, contours=contours,
+        title=f"Drifter {PLATFORM_ID} \u2014 overview",
+        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo",
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
+    )
+
+    zoom_domain = dt.Domain.from_points(
+        df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
+        buffer_deg=0.005,
+    )
+    dt.plot_map(
+        df, zoom_domain, contours=contours,
+        title=f"Drifter {PLATFORM_ID} \u2014 zoom",
+        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(8, 6),
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
+    )
+
+    n_last = 15
+    last_df = df.iloc[-n_last:]
+    last_domain = dt.Domain.from_points(
+        last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
+        buffer_deg=0.003,
+    )
+    dt.plot_map(
+        df, last_domain, contours=contours,
+        title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
+        n_last=n_last,
+        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(7, 6),
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
+    )
+
+    write_html(summary)
+
+
+def write_html(summary):
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    stale_banner = ""
+    if summary["is_stale"]:
+        stale_banner = f"""
+        <div class="banner warning">
+          \u26a0\ufe0f No update in the last {summary['age_hours']:.1f}h \u2014 likely a
+          satellite coverage gap (e.g. drifter too far north). Values
+          below may be outdated.
+        </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="1800">
+<title>ASKJA Drifter \u2014 Live Status</title>
+<style>
+  body {{ font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px;
+          margin: 2rem auto; padding: 0 1rem; color: #222; }}
+  h1 {{ font-size: 1.6rem; }}
+  .meta {{ color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }}
+  .summary {{ background: #f4f8fb; border-left: 4px solid #2b7de9; padding: 1rem 1.25rem;
+              border-radius: 4px; margin-bottom: 1.5rem; font-size: 1.05rem; }}
+  .banner.warning {{ background: #fff3cd; border-left: 4px solid #e6a700; padding: 0.9rem 1.1rem;
+                      border-radius: 4px; margin-bottom: 1.5rem; }}
+  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }}
+  .grid figure {{ margin: 0; }}
+  img {{ width: 100%; border-radius: 6px; border: 1px solid #ddd; }}
+  figcaption {{ font-size: 0.85rem; color: #555; margin-top: 0.3rem; text-align: center; }}
+  @media (max-width: 700px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+</style>
+</head>
+<body>
+  <h1>Askja lake surface drifter \u2014 Live Status</h1>
+  <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
+  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div>
+  {stale_banner}
+  <div class="summary">{summary['text']}</div>
+
+  <figure>
+    <img src="assets/timeseries.png" alt="SST time series">
+    <figcaption>Raw and smoothed sea surface temperature</figcaption>
+  </figure>
+
+  <div class="grid">
+    <figure>
+      <img src="assets/map_overview.png" alt="Overview map">
+      <figcaption>Overview</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/map_zoom.png" alt="Zoomed map">
+      <figcaption>Zoom</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/map_last_positions.png" alt="Last positions map">
+      <figcaption>Most recent positions</figcaption>
+    </figure>
+  </div>
+</body>
+</html>
+"""
+    with open(os.path.join(OUT_DIR, "index.html"), "w") as f:
+        f.write(html)
+    print(f"Wrote {os.path.join(OUT_DIR, 'index.html')}")
+
+
+if __name__ == "__main__":
+    main()
