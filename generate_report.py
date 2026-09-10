@@ -114,7 +114,7 @@ def main():
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
 
-    n_last = 5
+    n_last = 15
     last_df = df.iloc[-n_last:]
     last_domain = dt.Domain.from_points(
         last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
