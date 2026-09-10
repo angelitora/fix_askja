@@ -168,8 +168,9 @@ def write_html(summary):
 </style>
 </head>
 <body>
-  <h1>ASKJA Drifter \u2014 Live Status</h1>
+  <h1>Askja Surface Drifter \u2014 Live Status</h1>
   <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
+  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div>
   {stale_banner}
   <div class="summary">{summary['text']}</div>
 
