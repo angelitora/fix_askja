@@ -83,12 +83,13 @@ def main():
     dt.plot_timeseries(
         df, smooth_window=SMOOTH_WINDOW,
         title=f"Drifter {PLATFORM_ID} \u2014 surface temperature",
+        ylim=(SST_VMIN, SST_VMAX),  # fixed range, matches the maps' color scale
         save=True, outfile=os.path.join(ASSETS_DIR, "timeseries.png"),
     )
 
     domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        auto_buffer=True, auto_pad_frac=1.5, min_buffer_deg=0.025,
+        auto_buffer=True, auto_pad_frac=1.5, min_buffer_deg=0.04,
     )
     # This is a moored instrument, not a free drifter — it doesn't
     # actually move, so the map is centered on the median GPS position
@@ -131,7 +132,7 @@ def main():
 
     zoom_domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        auto_buffer=True, auto_pad_frac=0.8,
+        auto_buffer=True, auto_pad_frac=0.8, min_buffer_deg=0.012,
     )
     dt.plot_map_simple(
         df, zoom_domain,
