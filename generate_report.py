@@ -86,10 +86,23 @@ def main():
         save=True, outfile=os.path.join(ASSETS_DIR, "timeseries.png"),
     )
 
-    domain = dt.Domain.from_points(
+    domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.03,
+        auto_buffer=True, auto_pad_frac=1.5,
     )
+    # This is a moored instrument, not a free drifter — it doesn't
+    # actually move, so the map is centered on the median GPS position
+    # (from_center) rather than fit to the spread of points (from_points).
+    # auto_buffer=True also SIZES the view from the real cluster's own
+    # (outlier-trimmed) spread, rather than a fixed guessed buffer_deg —
+    # a generous fixed buffer can still reach far enough to pull a stray
+    # point back into view even when centering is correct, which is
+    # exactly what was happening here (buffer_deg=0.03 was wide enough
+    # to still include a ~1.2km-away GPS glitch). auto_pad_frac scales
+    # how much breathing room around the real cluster each of the three
+    # maps below gets — overview widest, last-positions tightest — while
+    # all three stay equally immune to the outlier itself.
+    #
     # The earlier "everything combined breaks" bug was specifically the
     # manually-positioned colorbar (fig.canvas.draw() + get_position()) —
     # that's gone now, replaced with a plain ax= colorbar. So combining
@@ -116,9 +129,9 @@ def main():
         save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
     )
 
-    zoom_domain = dt.Domain.from_points(
+    zoom_domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.005,
+        auto_buffer=True, auto_pad_frac=0.8,
     )
     dt.plot_map_simple(
         df, zoom_domain,
@@ -134,9 +147,12 @@ def main():
 
     n_last = 15
     last_df = df.iloc[-n_last:]
-    last_domain = dt.Domain.from_points(
-        last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.003,
+    # Centered/sized from the FULL record's robust spread (more data =
+    # more robust), not just these last 15 points — still only *displays*
+    # the last n_last readings via n_last= below.
+    last_domain = dt.Domain.from_center(
+        df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
+        auto_buffer=True, auto_pad_frac=0.5,
     )
     dt.plot_map_simple(
         df, last_domain,

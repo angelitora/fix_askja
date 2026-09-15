@@ -117,6 +117,70 @@ class Domain:
         return cls(lon_min - buffer_deg, lon_max + buffer_deg,
                     lat_min - lat_buffer, lat_max + lat_buffer)
 
+    @classmethod
+    def from_center(cls, lons, lats, buffer_deg=0.01, lat_buffer_factor=None,
+                     center="median", auto_buffer=False, min_buffer_deg=0.001,
+                     auto_pad_frac=0.6, iqr_k=1.5):
+        """
+        Build a domain centered on a robust central position — appropriate
+        for a moored instrument that doesn't actually move, where any
+        large deviation from the typical position is GPS noise/error,
+        not real movement. Simpler and more robust than `from_points()`
+        for this case, since centering never looks at the spread/range
+        of the data at all — an outlier can't pull the center, however
+        extreme it is.
+
+        Parameters
+        ----------
+        center : {'median', 'mean'}
+            'median' (default) is more robust than 'mean' — a single
+            wild GPS reading barely shifts the median, but can still
+            noticeably pull a plain average toward itself.
+        buffer_deg : float
+            Fixed buffer in degrees, used as-is when `auto_buffer=False`
+            (the default). A generous fixed buffer will still reach far
+            enough to include a stray outlier in the *view* even though
+            it can't pull the *center* — if that's happening, either
+            shrink buffer_deg or use auto_buffer instead.
+        auto_buffer : bool
+            If True, `buffer_deg` is ignored and the buffer is instead
+            computed from the real cluster's own spread (Tukey IQR-
+            trimmed range — same method as `from_points`' robust mode
+            and `robust_range` — so the outlier can't inflate this
+            either), times `auto_pad_frac`, floored at `min_buffer_deg`.
+            Adapts to however tight or loose the mooring's actual GPS
+            jitter is, instead of guessing a fixed constant that can end
+            up too large (an outlier reaches into view despite correct
+            centering) or too small (crops real, valid jitter).
+        """
+        lons = np.asarray(lons, dtype=float)
+        lats = np.asarray(lats, dtype=float)
+
+        if center == "median":
+            lon_c, lat_c = np.median(lons), np.median(lats)
+        elif center == "mean":
+            lon_c, lat_c = lons.mean(), lats.mean()
+        else:
+            raise ValueError("center must be 'median' or 'mean'")
+
+        if lat_buffer_factor is None:
+            lat_buffer_factor = np.cos(np.radians(lat_c))
+
+        if auto_buffer:
+            lon_lo, lon_hi = _iqr_inlier_range(lons, k=iqr_k)
+            lat_lo, lat_hi = _iqr_inlier_range(lats, k=iqr_k)
+            lon_span = (lon_hi - lon_lo) if lon_lo is not None else 0.0
+            # convert the lat span into lon-buffer-equivalent units so
+            # the two are comparable, using the same factor applied below
+            lat_span_as_lon = ((lat_hi - lat_lo) / max(lat_buffer_factor, 1e-9)
+                                if lat_lo is not None else 0.0)
+            buffer_deg = max(lon_span, lat_span_as_lon) * auto_pad_frac
+            buffer_deg = max(buffer_deg, min_buffer_deg)
+
+        lat_buffer = buffer_deg * lat_buffer_factor
+        return cls(lon_c - buffer_deg, lon_c + buffer_deg,
+                    lat_c - lat_buffer, lat_c + lat_buffer)
+
     def __repr__(self):
         return (f"Domain(lon=[{self.lon1}, {self.lon2}], "
                 f"lat=[{self.lat1}, {self.lat2}])")
