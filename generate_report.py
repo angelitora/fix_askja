@@ -24,7 +24,7 @@ import drifter_tools as dt
 # Config
 # ---------------------------------------------------------------
 PLATFORM_ID = "300534068744010"
-DAYS_AGO = 33
+DAYS_AGO = 35
 API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 
 # Credentials: prefer environment variables (set as GitHub Actions
@@ -83,7 +83,8 @@ def main():
     dt.plot_timeseries(
         df, smooth_window=SMOOTH_WINDOW,
         title=f"Drifter {PLATFORM_ID} \u2014 surface temperature",
-        ylim=(SST_VMIN, SST_VMAX),  # fixed range, matches the maps' color scale
+        #ylim=(SST_VMIN, SST_VMAX),  # fixed range, matches the maps' color scale
+        ylim=(3,12),
         save=True, outfile=os.path.join(ASSETS_DIR, "timeseries.png"),
     )
 
