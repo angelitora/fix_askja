@@ -88,7 +88,7 @@ def main():
 
     domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        auto_buffer=True, auto_pad_frac=1.5,
+        auto_buffer=True, auto_pad_frac=1.5, min_buffer_deg=0.025,
     )
     # This is a moored instrument, not a free drifter — it doesn't
     # actually move, so the map is centered on the median GPS position
