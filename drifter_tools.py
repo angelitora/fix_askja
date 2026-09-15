@@ -388,7 +388,7 @@ def robust_range(values, k=1.5, pad_frac=0.1):
 def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
                      extreme_threshold_std=1.0, exclude_first_days=1,
                      title="Drifter surface temperature",
-                     robust_ylim=True, ylim_iqr_k=1.5,
+                     robust_ylim=True, ylim_iqr_k=1.5, ylim=None,
                      save=False, outfile="timeseries.png", dpi=300):
     """
     Two-panel time series plot:
@@ -432,11 +432,17 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
         water the drifter settles into. Set to 0 to use the whole
         record for the baseline.
     robust_ylim : bool
-        If True (default), the top panel's y-axis is set from the
-        non-outlier range of the raw SST data (via `robust_range`,
-        using Tukey's IQR fence) instead of matplotlib's default
-        autoscale (true min/max) — so one bad reading doesn't stretch
-        the axis. Set False to go back to plain autoscale.
+        If True (default) and `ylim` isn't given, the top panel's y-axis
+        is set from the non-outlier range of the raw SST data (via
+        `robust_range`, using Tukey's IQR fence) instead of matplotlib's
+        default autoscale (true min/max) — so one bad reading doesn't
+        stretch the axis. Set False to go back to plain autoscale.
+    ylim : (float, float) or None
+        If given, this FIXED range is used for the top panel's y-axis
+        directly — no data-dependent logic at all (ignores robust_ylim
+        entirely), so it never crops real data as long as the range you
+        pick is wide enough. Pass e.g. (SST_VMIN, SST_VMAX) to match the
+        same fixed range used for the maps' color scale.
     """
     flags = compute_extreme_flags(
         df, smooth_window=smooth_window,
@@ -451,8 +457,8 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
     anomaly = df["sst_smooth"] - baseline
 
     fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(12, 8), sharex=True,
-        gridspec_kw={"height_ratios": [1, 1], "hspace": 0.08},
+        2, 1, figsize=(12, 9), sharex=True,
+        gridspec_kw={"height_ratios": [1, 1.3], "hspace": 0.08},
     )
 
     # --- panel 1: raw + smoothed SST ---
@@ -460,7 +466,9 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
             alpha=0.4, color="tab:blue", label="raw SST")
     ax1.plot(df.index, df["sst_smooth"], marker="o", ms=4, lw=1.5,
             color="tab:red", label=f"{smooth_window}-pt smoothed")
-    if robust_ylim:
+    if ylim is not None:
+        ax1.set_ylim(*ylim)
+    elif robust_ylim:
         ylo, yhi = robust_range(df["SST(degC)"].values, k=ylim_iqr_k)
         if ylo is not None:
             ax1.set_ylim(ylo, yhi)
@@ -481,12 +489,9 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
                       color="#67000d", alpha=0.95, interpolate=True,
                       label=f"very high (>{extreme_threshold_std:g}\u03c3, "
                             f"{extreme_smooth_window}-pt smooth)")
-    if robust_ylim:
-        alo, ahi = robust_range(anomaly.values, k=ylim_iqr_k)
-        if alo is not None:
-            # keep 0 visible even if the inlier range doesn't naturally
-            # span it (e.g. a run of all-positive or all-negative anomaly)
-            ax2.set_ylim(min(alo, 0), max(ahi, 0))
+    # No y-limit cropping here (unlike panel 1) — this panel exists
+    # specifically to show real extremes, so it always uses full
+    # autoscale rather than any outlier-trimmed range.
     ax2.set_ylabel("Anomaly (\u00b0C)")
     ax2.grid(True)
     ax2.legend(loc="upper left", fontsize=8)
