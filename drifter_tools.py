@@ -71,7 +71,8 @@ class Domain:
         return (self.lon1, self.lon2, self.lat1, self.lat2)
 
     @classmethod
-    def from_points(cls, lons, lats, buffer_deg=0.01, lat_buffer_factor=None):
+    def from_points(cls, lons, lats, buffer_deg=0.01, lat_buffer_factor=None,
+                     robust=True, iqr_k=1.5):
         """
         Build a domain tightly bounding a set of points, plus a margin.
 
@@ -87,14 +88,34 @@ class Domain:
         `lat_buffer_factor=None` (default) auto-computes cos(mean
         latitude of the points). Pass a specific value (e.g. 1.0 to
         disable the correction, matching the old behaviour) to override.
+
+        `robust=True` (default): bounds come from the non-outlier range
+        of the points (Tukey's IQR fence — see `robust_range`) instead
+        of the true min/max, so a single wildly-off GPS reading (a
+        sensor/telemetry glitch) doesn't blow out the domain and squish
+        the real trajectory into a small corner of the map. Every point
+        is still plotted regardless — this only changes which bounds get
+        picked for the *default view*; an outlier just ends up outside
+        the visible extent instead of dominating it. Needs at least 4
+        points to bother trimming; falls back to true min/max below
+        that. Set robust=False to go back to the old true-min/max
+        behaviour.
         """
-        lons = np.asarray(lons)
-        lats = np.asarray(lats)
+        lons = np.asarray(lons, dtype=float)
+        lats = np.asarray(lats, dtype=float)
         if lat_buffer_factor is None:
             lat_buffer_factor = np.cos(np.radians(lats.mean()))
         lat_buffer = buffer_deg * lat_buffer_factor
-        return cls(lons.min() - buffer_deg, lons.max() + buffer_deg,
-                    lats.min() - lat_buffer, lats.max() + lat_buffer)
+
+        if robust and len(lons) >= 4:
+            lon_min, lon_max = _iqr_inlier_range(lons, k=iqr_k)
+            lat_min, lat_max = _iqr_inlier_range(lats, k=iqr_k)
+        else:
+            lon_min, lon_max = lons.min(), lons.max()
+            lat_min, lat_max = lats.min(), lats.max()
+
+        return cls(lon_min - buffer_deg, lon_max + buffer_deg,
+                    lat_min - lat_buffer, lat_max + lat_buffer)
 
     def __repr__(self):
         return (f"Domain(lon=[{self.lon1}, {self.lon2}], "
@@ -209,7 +230,7 @@ def summarize_latest_temperature(df, window_hours=3, expected_interval_hours=3,
 # markers, so both always agree on what counts as extreme.
 # ---------------------------------------------------------------------
 def compute_extreme_flags(df, smooth_window=3, extreme_smooth_window=5,
-                           extreme_threshold_std=3.0, exclude_first_days=1):
+                           extreme_threshold_std=1.0, exclude_first_days=1):
     """
     Identify which rows of `df` have "very high" SST.
 
@@ -252,9 +273,58 @@ def compute_extreme_flags(df, smooth_window=3, extreme_smooth_window=5,
 # ---------------------------------------------------------------------
 # 2. Time series plot: raw+smoothed SST, plus an anomaly panel
 # ---------------------------------------------------------------------
-def plot_timeseries(df, smooth_window=3, extreme_smooth_window=10,
-                     extreme_threshold_std=3.0, exclude_first_days=1,
+def _iqr_inlier_range(values, k=1.5):
+    """
+    Min/max of `values` after excluding points outside Tukey's IQR
+    fence (values farther than k * IQR from the 25th/75th percentile).
+    Unlike a fixed percentile cutoff, this correctly excludes a true
+    outlier regardless of how many points there are — e.g. 1 bad point
+    out of 60 (~1.7%) would still partly influence a 1st/99th percentile
+    cutoff, since 1.7% straddles that threshold, but the IQR fence
+    identifies it as an outlier and drops it entirely, since Q1/Q3
+    themselves aren't affected by a single extreme point.
+
+    Returns (None, None) if there's no valid (finite) data.
+    """
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if len(values) == 0:
+        return None, None
+    q1, q3 = np.percentile(values, [25, 75])
+    iqr = q3 - q1
+    if iqr == 0:
+        return values.min(), values.max()
+    lo_fence, hi_fence = q1 - k * iqr, q3 + k * iqr
+    inliers = values[(values >= lo_fence) & (values <= hi_fence)]
+    if len(inliers) == 0:
+        inliers = values  # everything got fenced out somehow — don't crash
+    return inliers.min(), inliers.max()
+
+
+def robust_range(values, k=1.5, pad_frac=0.1):
+    """
+    Padded (lo, hi) range spanning the non-outlier points in `values`
+    (via `_iqr_inlier_range`), instead of plain min/max — so a single
+    wild outlier (a sensor glitch, a telemetry error) doesn't single-
+    handedly stretch an axis and squish all the real data into an
+    unreadable sliver. The outlier itself is still drawn on the plot, it
+    just ends up clipped outside the visible range rather than
+    dictating it.
+
+    Returns (None, None) if there's no valid (finite) data.
+    """
+    lo, hi = _iqr_inlier_range(values, k=k)
+    if lo is None:
+        return None, None
+    span = hi - lo
+    pad = span * pad_frac if span > 0 else max(abs(hi), 1.0) * pad_frac
+    return lo - pad, hi + pad
+
+
+def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
+                     extreme_threshold_std=1.0, exclude_first_days=1,
                      title="Drifter surface temperature",
+                     robust_ylim=True, ylim_iqr_k=1.5,
                      save=False, outfile="timeseries.png", dpi=300):
     """
     Two-panel time series plot:
@@ -297,6 +367,12 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=10,
         day is typically deployment/handling, not representative of the
         water the drifter settles into. Set to 0 to use the whole
         record for the baseline.
+    robust_ylim : bool
+        If True (default), the top panel's y-axis is set from the
+        non-outlier range of the raw SST data (via `robust_range`,
+        using Tukey's IQR fence) instead of matplotlib's default
+        autoscale (true min/max) — so one bad reading doesn't stretch
+        the axis. Set False to go back to plain autoscale.
     """
     flags = compute_extreme_flags(
         df, smooth_window=smooth_window,
@@ -320,6 +396,10 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=10,
             alpha=0.4, color="tab:blue", label="raw SST")
     ax1.plot(df.index, df["sst_smooth"], marker="o", ms=4, lw=1.5,
             color="tab:red", label=f"{smooth_window}-pt smoothed")
+    if robust_ylim:
+        ylo, yhi = robust_range(df["SST(degC)"].values, k=ylim_iqr_k)
+        if ylo is not None:
+            ax1.set_ylim(ylo, yhi)
     ax1.set_ylabel("SST (\u00b0C)")
     ax1.set_title(title)
     ax1.grid(True)
@@ -337,6 +417,12 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=10,
                       color="#67000d", alpha=0.95, interpolate=True,
                       label=f"very high (>{extreme_threshold_std:g}\u03c3, "
                             f"{extreme_smooth_window}-pt smooth)")
+    if robust_ylim:
+        alo, ahi = robust_range(anomaly.values, k=ylim_iqr_k)
+        if alo is not None:
+            # keep 0 visible even if the inlier range doesn't naturally
+            # span it (e.g. a run of all-positive or all-negative anomaly)
+            ax2.set_ylim(min(alo, 0), max(ahi, 0))
     ax2.set_ylabel("Anomaly (\u00b0C)")
     ax2.grid(True)
     ax2.legend(loc="upper left", fontsize=8)
@@ -499,7 +585,7 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                      show_colorbar=False,
                      contours=None,
                      show_extreme=False, smooth_window=5,
-                     extreme_smooth_window=10, extreme_threshold_std=3.0,
+                     extreme_smooth_window=10, extreme_threshold_std=5.0,
                      exclude_first_days=1, extreme_color="black",
                      extreme_marker="o", extreme_size=80, extreme_alpha=0.7,
                      show_gridlabels=False,
@@ -620,7 +706,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
              show_extreme=True, extreme_color="black",
              extreme_marker="o", extreme_size=80,
              smooth_window=5, extreme_smooth_window=10,
-             extreme_threshold_std=3.0, exclude_first_days=1,
+             extreme_threshold_std=5.0, exclude_first_days=1,
              figsize=(9, 8),
              save=False, outfile="map.png", dpi=300):
     """
