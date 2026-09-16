@@ -24,7 +24,7 @@ import drifter_tools as dt
 # Config
 # ---------------------------------------------------------------
 PLATFORM_ID = "300534068744010"
-DAYS_AGO = 35
+DAYS_AGO = 36
 API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 
 # Credentials: prefer environment variables (set as GitHub Actions
@@ -37,7 +37,8 @@ AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
 AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
 SMOOTH_WINDOW = 5
-SST_VMIN, SST_VMAX = 4.5, 6.5
+SST_VMIN, SST_VMAX = 4.5, 6.5   # map color scale
+TS_YMIN, TS_YMAX = 3.5, 11.5    # timeseries y-axis — independent of the map's color scale, wide enough not to crop real excursions
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
 OUT_DIR = "docs"
@@ -83,14 +84,14 @@ def main():
     dt.plot_timeseries(
         df, smooth_window=SMOOTH_WINDOW,
         title=f"Drifter {PLATFORM_ID} \u2014 surface temperature",
-        #ylim=(SST_VMIN, SST_VMAX),  # fixed range, matches the maps' color scale
-        ylim=(3,12),
+        ylim=(TS_YMIN, TS_YMAX),  # independent fixed range, NOT tied to the map's color scale
         save=True, outfile=os.path.join(ASSETS_DIR, "timeseries.png"),
     )
 
     domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        auto_buffer=True, auto_pad_frac=1.5, min_buffer_deg=0.05,
+        auto_buffer=True, auto_pad_frac=1.5, min_buffer_deg=0.055,
+        buffer_west_deg=0.02, buffer_east_deg=0.09,
     )
     # This is a moored instrument, not a free drifter — it doesn't
     # actually move, so the map is centered on the median GPS position
@@ -133,7 +134,7 @@ def main():
 
     zoom_domain = dt.Domain.from_center(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        auto_buffer=True, auto_pad_frac=0.8, min_buffer_deg=0.015,
+        auto_buffer=True, auto_pad_frac=0.8, min_buffer_deg=0.012,
     )
     dt.plot_map_simple(
         df, zoom_domain,
@@ -149,19 +150,21 @@ def main():
 
     n_last = 15
     last_df = df.iloc[-n_last:]
-    # Centered/sized from the FULL record's robust spread (more data =
-    # more robust), not just these last 15 points — still only *displays*
-    # the last n_last readings via n_last= below.
+    # Centered on the mean position of just these last n_last points, as
+    # requested — NOT the full record (that was the earlier behavior,
+    # reasoned as "more data = more robust", but you want this view to
+    # reflect specifically where the mooring has been most recently).
     last_domain = dt.Domain.from_center(
-        df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        auto_buffer=True, auto_pad_frac=0.5,
+        last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
+        center="mean", auto_buffer=True, auto_pad_frac=0.5,
     )
     dt.plot_map_simple(
         df, last_domain,
         title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
         n_last=n_last, figsize=(7, 6),
         color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
-        show_colorbar=True, basemap="imo",
+        show_colorbar=True, contours=contours, basemap="imo",
+        show_recent_marker=True, recent_marker_size_factor=2.0,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
     )
 

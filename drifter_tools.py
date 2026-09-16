@@ -120,7 +120,9 @@ class Domain:
     @classmethod
     def from_center(cls, lons, lats, buffer_deg=0.01, lat_buffer_factor=None,
                      center="median", auto_buffer=False, min_buffer_deg=0.001,
-                     auto_pad_frac=0.6, iqr_k=1.5):
+                     auto_pad_frac=0.6, iqr_k=1.5,
+                     buffer_west_deg=None, buffer_east_deg=None,
+                     buffer_south_deg=None, buffer_north_deg=None):
         """
         Build a domain centered on a robust central position — appropriate
         for a moored instrument that doesn't actually move, where any
@@ -152,6 +154,15 @@ class Domain:
             jitter is, instead of guessing a fixed constant that can end
             up too large (an outlier reaches into view despite correct
             centering) or too small (crops real, valid jitter).
+        buffer_west_deg, buffer_east_deg, buffer_south_deg, buffer_north_deg : float or None
+            Override the buffer independently on each side, for an
+            off-center ("eccentric") view — e.g. showing more lake to
+            the east than land to the west, even though the mooring
+            itself sits toward the west side of the lake. The CENTER
+            point doesn't move; only how far the view extends on that
+            particular side does. Any left as None falls back to the
+            normal symmetric buffer (buffer_deg, or the auto-computed
+            one) for that side.
         """
         lons = np.asarray(lons, dtype=float)
         lats = np.asarray(lats, dtype=float)
@@ -178,8 +189,13 @@ class Domain:
             buffer_deg = max(buffer_deg, min_buffer_deg)
 
         lat_buffer = buffer_deg * lat_buffer_factor
-        return cls(lon_c - buffer_deg, lon_c + buffer_deg,
-                    lat_c - lat_buffer, lat_c + lat_buffer)
+
+        west = buffer_west_deg if buffer_west_deg is not None else buffer_deg
+        east = buffer_east_deg if buffer_east_deg is not None else buffer_deg
+        south = buffer_south_deg if buffer_south_deg is not None else lat_buffer
+        north = buffer_north_deg if buffer_north_deg is not None else lat_buffer
+
+        return cls(lon_c - west, lon_c + east, lat_c - south, lat_c + north)
 
     def __repr__(self):
         return (f"Domain(lon=[{self.lon1}, {self.lon2}], "
@@ -659,6 +675,8 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                      extreme_marker="o", extreme_size=80, extreme_alpha=0.7,
                      show_gridlabels=False,
                      show_trajectory=False, show_recent_marker=False,
+                     point_size=30, recent_marker_size_factor=2.0,
+                     recent_marker_edgewidth=2.0,
                      figsize=(9, 8), save=False, outfile="map_simple.png",
                      dpi=300):
     """
@@ -686,6 +704,11 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                        marker
     alpha, extreme_alpha : transparency of the main points / extreme
                        markers respectively.
+    point_size : area (matplotlib scatter `s=`) of the main data points.
+    recent_marker_size_factor : size of the "most recent position" open
+                       circle, as a multiple of the main points'
+                       diameter — default 2.0 means twice as wide.
+    recent_marker_edgewidth : line thickness of that open circle.
     """
     full_df = df
     sub = df.iloc[-n_last:] if n_last else df
@@ -710,9 +733,9 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
     if color_by_sst:
         sst = sub["sst_smooth"].values
         sc = ax.scatter(lon, lat, c=sst, cmap=cmap, vmin=vmin, vmax=vmax,
-                         s=30, alpha=alpha, zorder=3, transform=ccrs.PlateCarree())
+                         s=point_size, alpha=alpha, zorder=3, transform=ccrs.PlateCarree())
     else:
-        sc = ax.scatter(lon, lat, color=point_color, s=30, alpha=alpha,
+        sc = ax.scatter(lon, lat, color=point_color, s=point_size, alpha=alpha,
                          zorder=3, transform=ccrs.PlateCarree())
 
     add_contours(ax, contours)
@@ -731,8 +754,14 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                        zorder=6, transform=ccrs.PlateCarree())
 
     if show_recent_marker:
-        ax.plot(lon[-1], lat[-1], marker="o", markersize=14,
-                markerfacecolor="none", markeredgecolor="black", zorder=5,
+        # markersize (ax.plot) is a diameter in points, but point_size
+        # (ax.scatter's s=) is an area in points^2 -- convert so the
+        # comparison is actually "N times as wide", not mismatched units.
+        point_diameter = 2 * np.sqrt(point_size / np.pi)
+        recent_marker_size = point_diameter * recent_marker_size_factor
+        ax.plot(lon[-1], lat[-1], marker="o", markersize=recent_marker_size,
+                markerfacecolor="none", markeredgecolor="black",
+                markeredgewidth=recent_marker_edgewidth, zorder=7,
                 transform=ccrs.PlateCarree())
 
     if show_gridlabels:
