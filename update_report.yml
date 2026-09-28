@@ -5,7 +5,7 @@ on:
     # Every 3 hours, 5 minutes past the hour (matches the drifter's own
     # reporting cadence, offset slightly so new data has landed by the
     # time this runs).
-    - cron: '5 */3 * * *'
+    - cron: '25 */3 * * *'
   workflow_dispatch: {}   # lets you trigger a run manually from the Actions tab
 
 permissions:
