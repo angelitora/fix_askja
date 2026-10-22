@@ -14,6 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -39,3 +40,4 @@ jobs:
           git add docs
           git diff --quiet --cached || git commit -m "Update drifter report [skip ci]"
           git push
+
