@@ -38,7 +38,7 @@ AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
 SMOOTH_WINDOW = 5
 SST_VMIN, SST_VMAX = 4.5, 6.5   # map color scale
-TS_YMIN, TS_YMAX = 3.5, 11.5    # timeseries y-axis — independent of the map's color scale, wide enough not to crop real excursions
+TS_YMIN, TS_YMAX = 1.5, 10.5    # timeseries y-axis — independent of the map's color scale, wide enough not to crop real excursions
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
 OUT_DIR = "docs"
